@@ -22,9 +22,10 @@ def test_normalize_data_source_kind_defaults_unknown():
 
 def test_normalize_data_source_kind_hidden_sources():
     assert normalize_data_source_kind("akshare") == "akshare"
-    assert normalize_data_source_kind("eastmoney") == "eastmoney"
     assert normalize_data_source_kind("tushare") == "tushare"
     assert normalize_data_source_kind("yfinance") == "yfinance"
+    # eastmoney 已并入 UI 可见的 ashare，不再是独立 kind
+    assert normalize_data_source_kind("eastmoney") == "mt5"
 
 
 def test_mt5_in_ui_choices():
@@ -32,8 +33,8 @@ def test_mt5_in_ui_choices():
     ui_kinds = {k for k, _ in DATA_SOURCE_CHOICES}
     assert "mt5" in ui_kinds
     assert DATA_SOURCE_CHOICES[0][0] == "mt5"
-    # eastmoney / AkShare 仍是隐藏源
-    assert "eastmoney" not in ui_kinds
+    # ashare / AkShare 均为隐藏源
+    assert "ashare" not in ui_kinds
     assert "akshare" not in ui_kinds
 
 
@@ -45,14 +46,14 @@ def test_tushare_not_in_ui_choices():
 def test_create_data_source_returns_expected_types():
     assert isinstance(create_data_source("mt5"), MT5Source)
     assert isinstance(create_data_source("tradingview"), TradingViewSource)
-    assert isinstance(create_data_source("eastmoney"), EastMoneySource)
+    assert isinstance(create_data_source("ashare"), EastMoneySource)
     assert isinstance(create_data_source("tushare"), TushareSource)
 
 
 def test_default_symbols_per_kind():
     assert default_symbol_for_kind("mt5") == "XAUUSDm"
     assert default_symbol_for_kind("tradingview") == "XAUUSD"
-    assert default_symbol_for_kind("eastmoney") == "000001"
+    assert default_symbol_for_kind("ashare") == "000001"
     assert default_symbol_for_kind("tushare") == "000001"
 
 

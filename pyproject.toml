@@ -31,6 +31,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# 免费 A 股行情替补源（东财失效时的后备；纯 HTTP 无需任何依赖）
+# zzshare 为托管 API，pip 安装后即可免 Key 使用，可选
+ashare-fallback = [
+    "zzshare",
+]
 dev = [
     "pytest>=8",
     "pytest-qt>=4.4",

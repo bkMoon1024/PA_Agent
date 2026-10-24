@@ -1,7 +1,7 @@
 """Refresh interval, cache TTL, and zombie-loop timing for data sources."""
 from __future__ import annotations
 
-HTTP_POLL_SOURCES: frozenset[str] = frozenset({"eastmoney", "akshare"})
+HTTP_POLL_SOURCES: frozenset[str] = frozenset({"ashare", "akshare"})
 
 HTTP_MIN_REFRESH_MS = 2500
 HTTP_SNAPSHOT_CACHE_TTL_S = 8.0

@@ -400,6 +400,21 @@ def _daily_kline_params(
     return params
 
 
+def _fallback_daily_rows(
+    symbol: str, start_date: str, end_date: str, adjust: str
+) -> list[dict[str, Any]]:
+    """Free-source daily fallback (Tencent -> zzshare). Returns [] on failure."""
+    try:
+        from pa_agent.data.ashare_fallback import fallback_daily
+
+        return fallback_daily(
+            symbol, start_date=start_date, end_date=end_date, adjust=adjust
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("daily fallback failed for %s: %s", symbol, exc)
+        return []
+
+
 def fetch_stock_daily(
     symbol: str,
     *,
@@ -413,7 +428,17 @@ def fetch_stock_daily(
         beg=start_date,
         end=end_date,
     )
-    return _fetch_kline(params)
+    try:
+        rows = _fetch_kline(params)
+    except EastMoneyTransientError as exc:
+        rows = _fallback_daily_rows(symbol, start_date, end_date, adjust)
+        if rows:
+            logger.info("fetch_stock_daily fallback used for %s (%s)", symbol, exc)
+            return rows
+        raise
+    if not rows:
+        rows = _fallback_daily_rows(symbol, start_date, end_date, adjust)
+    return rows
 
 
 def _fetch_kline_resilient(params: dict[str, Any]) -> list[dict[str, Any]]:
@@ -463,6 +488,21 @@ def fetch_stock_daily_resilient(
     raise last_exc or EastMoneyTransientError("日线拉取失败")
 
 
+def _fallback_minute_rows(
+    symbol: str, period: str, start_date: str, end_date: str
+) -> list[dict[str, Any]]:
+    """Free-source minute fallback (Tencent -> zzshare). Returns [] on failure."""
+    try:
+        from pa_agent.data.ashare_fallback import fallback_minute
+
+        return fallback_minute(
+            symbol, period=str(period), start_date=start_date, end_date=end_date
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("minute fallback failed for %s: %s", symbol, exc)
+        return []
+
+
 def _secid(symbol: str, *, is_index: bool) -> str:
     return index_secid(symbol) if is_index else stock_secid(symbol)
 
@@ -479,32 +519,40 @@ def fetch_stock_minute(
     adjust_map = {"qfq": "1", "hfq": "2", "": "0", "none": "0"}
     secid = _secid(symbol, is_index=is_index)
     fqt = "0" if is_index else adjust_map.get(adjust, "1")
-    if period == "1" and not is_index:
-        params = {
-            "fields1": "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13",
-            "fields2": "f51,f52,f53,f54,f55,f56,f57,f58",
-            "ut": _UT,
-            "ndays": "5",
-            "iscr": "0",
-            "secid": secid,
-        }
-        rows = _fetch_trends(params)
-    else:
-        params = {
-            "fields1": "f1,f2,f3,f4,f5,f6",
-            "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
-            "ut": _UT,
-            "klt": period,
-            "fqt": fqt,
-            "secid": secid,
-            "beg": "0",
-            "end": "20500000",
-        }
-        rows = _fetch_kline(params)
+    rows: list[dict[str, Any]] = []
+    try:
+        if period == "1" and not is_index:
+            params = {
+                "fields1": "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13",
+                "fields2": "f51,f52,f53,f54,f55,f56,f57,f58",
+                "ut": _UT,
+                "ndays": "5",
+                "iscr": "0",
+                "secid": secid,
+            }
+            rows = _fetch_trends(params)
+        else:
+            params = {
+                "fields1": "f1,f2,f3,f4,f5,f6",
+                "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+                "ut": _UT,
+                "klt": period,
+                "fqt": fqt,
+                "secid": secid,
+                "beg": "0",
+                "end": "20500000",
+            }
+            rows = _fetch_kline(params)
+    except EastMoneyTransientError as exc:
+        logger.info("fetch_stock_minute fallback for %s: %s", symbol, exc)
+        return _fallback_minute_rows(symbol, period, start_date, end_date)
 
     start_dt = datetime.strptime(start_date[:19], "%Y-%m-%d %H:%M:%S")
     end_dt = datetime.strptime(end_date[:19], "%Y-%m-%d %H:%M:%S")
-    return [r for r in rows if start_dt <= r["time"] <= end_dt]
+    out = [r for r in rows if start_dt <= r["time"] <= end_dt]
+    if out:
+        return out
+    return _fallback_minute_rows(symbol, period, start_date, end_date)
 
 
 def fetch_index_daily(
@@ -844,7 +892,10 @@ def fetch_stock_order_book(symbol: str):
         payload = fetch_stock_quote_payload(symbol)
         fltt = 2
     if not payload:
-        return None
+        fallback = _fallback_order_book(symbol)
+        if fallback is not None:
+            logger.info("fetch_stock_order_book fallback used for %s", symbol)
+        return fallback
     return parse_order_book_payload(payload, fltt=fltt)
 
 
@@ -903,12 +954,37 @@ def fetch_stock_intraday_trends(symbol: str, *, ndays: int = 1) -> list[dict[str
         return []
 
 
+def _fallback_spot_quote(symbol: str) -> dict[str, Any] | None:
+    """Free-source spot fallback (Tencent -> zzshare -> Sina)."""
+    try:
+        from pa_agent.data.ashare_fallback import fallback_spot_quote
+
+        return fallback_spot_quote(symbol)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("spot fallback failed for %s: %s", symbol, exc)
+        return None
+
+
+def _fallback_order_book(symbol: str):
+    """Free-source order book fallback (Tencent -> zzshare)."""
+    try:
+        from pa_agent.data.ashare_fallback import fallback_order_book
+
+        return fallback_order_book(symbol)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("order book fallback failed for %s: %s", symbol, exc)
+        return None
+
+
 def fetch_stock_quote(symbol: str) -> dict[str, Any] | None:
     """Return code, name, and last price from East Money quote API."""
     code = symbol[-6:] if len(symbol) > 6 else symbol
     payload = fetch_stock_quote_payload(symbol)
     if not payload:
-        return None
+        fallback = _fallback_spot_quote(symbol)
+        if fallback:
+            logger.info("fetch_stock_quote fallback used for %s", symbol)
+        return fallback
     name = payload.get("f58")
     price_raw = payload.get("f43")
     if not name and price_raw is None:

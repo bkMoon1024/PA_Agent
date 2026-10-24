@@ -5,7 +5,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 DecisionStance = Literal["conservative", "balanced", "aggressive", "extreme_aggressive"]
-DataSourceKind = Literal["mt5", "tradingview", "akshare", "eastmoney", "eastmoney_futures", "tushare"]
+DataSourceKind = Literal[
+    "mt5", "tradingview", "ashare", "akshare", "eastmoney_futures", "tushare"
+]
 NormalizationMode = Literal["strict", "lenient"]
 
 
@@ -98,12 +100,8 @@ class GeneralSettings(BaseModel):
     @field_validator("last_data_source", mode="before")
     @classmethod
     def _coerce_legacy_data_source(cls, v: object) -> object:
-        if v == "yfinance":
-            return "eastmoney"
-        if v in ("adata", "a_share"):
-            return "akshare"
-        if v == "eastmoney":
-            return "eastmoney"
+        if v in ("yfinance", "eastmoney", "adata", "a_share"):
+            return "ashare"
         if v == "tushare":
             return "tushare"
         return v

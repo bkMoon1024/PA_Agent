@@ -13,29 +13,29 @@ from pa_agent.data.market_defaults import (
 DataSourceKind = Literal[
     "mt5",
     "tradingview",
+    "ashare",
     "akshare",
-    "eastmoney",
     "eastmoney_futures",
     "tushare",
     "yfinance",
 ]
 
 # UI-visible sources — 可在界面下拉框直接选择。
-# MT5 为默认数据源，排在首位；eastmoney 等仍可通过隐藏 kind 创建。
+# MT5 为默认数据源，排在首位；ashare（东方财富 + 免费替补）等仍可通过隐藏 kind 创建。
 DATA_SOURCE_CHOICES: tuple[tuple[DataSourceKind, str], ...] = (
     ("mt5", "MT5"),
     ("tradingview", "TradingView"),
 )
 
 _HIDDEN_KINDS: frozenset[DataSourceKind] = frozenset(
-    {"akshare", "tushare", "yfinance", "eastmoney", "eastmoney_futures"}
+    {"ashare", "akshare", "tushare", "yfinance", "eastmoney_futures"}
 )
 
 _DEFAULT_SYMBOLS: dict[DataSourceKind, str] = {
     "mt5": GOLD_MT5_SYMBOL,
     "tradingview": GOLD_TV_SYMBOL,
+    "ashare": A_SHARE_DEFAULT_SYMBOL,
     "akshare": A_SHARE_DEFAULT_SYMBOL,
-    "eastmoney": A_SHARE_DEFAULT_SYMBOL,
     "eastmoney_futures": "RB0 螺纹钢",
     "tushare": A_SHARE_DEFAULT_SYMBOL,
     "yfinance": "GC=F",
@@ -61,8 +61,8 @@ def data_source_label(kind: str | None) -> str:
     for key, label in DATA_SOURCE_CHOICES:
         if key == normalized:
             return label
-    if normalized == "eastmoney":
-        return "东方财富"
+    if normalized == "ashare":
+        return "A股(专属)"
     if normalized == "eastmoney_futures":
         return "东方财富期货"
     if normalized == "tushare":
@@ -85,7 +85,7 @@ def create_data_source(kind: str | None) -> DataSource:
         from pa_agent.data.tradingview import TradingViewSource
 
         return TradingViewSource()
-    if normalized == "eastmoney":
+    if normalized == "ashare":
         from pa_agent.data.eastmoney_source import EastMoneySource
 
         return EastMoneySource()
